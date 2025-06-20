@@ -2,7 +2,13 @@ module.exports = function (api) {
   api.cache(true);
   return {
     presets: [
-      ['babel-preset-expo', { jsxImportSource: 'react' }]
+      ['babel-preset-expo', { 
+        jsxImportSource: 'react',
+        lazyImports: true,
+        native: {
+          unstable_transformProfile: 'default'
+        }
+      }]
     ],
     plugins: [
       // Required for expo-router

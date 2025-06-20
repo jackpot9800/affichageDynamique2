@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "presentationkiosk",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },
