@@ -35,8 +35,7 @@
           ]
         }
       ],
-      "usesCleartextTraffic": true,
-      "networkSecurityConfig": "@xml/network_security_config"
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",
