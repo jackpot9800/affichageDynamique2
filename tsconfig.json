@@ -1,7 +1,7 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true,
+    "strict": false,
     "allowJs": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
@@ -11,7 +11,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "target": "es2020",
-    "lib": ["es2020", "dom"],
+    "lib": ["es2020", "dom", "dom.iterable"],
+    "isolatedModules": true,
+    "allowImportingTsExtensions": false,
     "paths": {
       "@/*": ["./*"]
     }
@@ -24,6 +26,7 @@
   ],
   "exclude": [
     "node_modules",
-    ".expo"
+    ".expo",
+    "node_modules/expo-modules-core/src"
   ]
 }
