@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {
-  SERVER_URL: 'server_url',
+  SERVER_HOST: 'server_host',
+  API_PATH: 'api_path',
+  UPLOADS_PATH: 'uploads_path',
   DEVICE_ID: 'device_id',
   DEVICE_REGISTERED: 'device_registered',
   ENROLLMENT_TOKEN: 'enrollment_token',
@@ -75,8 +77,16 @@ export interface DefaultPresentation {
   is_default: boolean;
 }
 
+export interface ServerConfig {
+  host: string;
+  apiPath: string;
+  uploadsPath: string;
+}
+
 class ApiService {
-  private baseUrl: string = '';
+  private serverHost: string = '';
+  private apiPath: string = 'api/';
+  private uploadsPath: string = 'uploads/';
   private deviceId: string = '';
   private isRegistered: boolean = false;
   private enrollmentToken: string = '';
@@ -92,14 +102,26 @@ class ApiService {
     try {
       console.log('=== INITIALIZING API SERVICE ===');
       
-      const savedUrl = await AsyncStorage.getItem(STORAGE_KEYS.SERVER_URL);
+      const savedHost = await AsyncStorage.getItem(STORAGE_KEYS.SERVER_HOST);
+      const savedApiPath = await AsyncStorage.getItem(STORAGE_KEYS.API_PATH);
+      const savedUploadsPath = await AsyncStorage.getItem(STORAGE_KEYS.UPLOADS_PATH);
       const savedDeviceId = await AsyncStorage.getItem(STORAGE_KEYS.DEVICE_ID);
       const savedRegistration = await AsyncStorage.getItem(STORAGE_KEYS.DEVICE_REGISTERED);
       const savedToken = await AsyncStorage.getItem(STORAGE_KEYS.ENROLLMENT_TOKEN);
       
-      if (savedUrl) {
-        this.baseUrl = savedUrl;
-        console.log('Loaded server URL:', this.baseUrl);
+      if (savedHost) {
+        this.serverHost = savedHost;
+        console.log('Loaded server host:', this.serverHost);
+      }
+      
+      if (savedApiPath) {
+        this.apiPath = savedApiPath;
+        console.log('Loaded API path:', this.apiPath);
+      }
+      
+      if (savedUploadsPath) {
+        this.uploadsPath = savedUploadsPath;
+        console.log('Loaded uploads path:', this.uploadsPath);
       }
       
       if (savedDeviceId) {
@@ -122,7 +144,9 @@ class ApiService {
       }
 
       console.log('=== API SERVICE INITIALIZED ===');
-      console.log('Server URL:', this.baseUrl);
+      console.log('Server Host:', this.serverHost);
+      console.log('API Path:', this.apiPath);
+      console.log('Uploads Path:', this.uploadsPath);
       console.log('Device ID:', this.deviceId);
       console.log('Is Registered:', this.isRegistered);
       console.log('API Type:', this.apiType);
@@ -192,7 +216,7 @@ class ApiService {
    * Démarre la vérification périodique des présentations assignées
    */
   async startAssignmentCheck(callback?: (presentation: AssignedPresentation) => void) {
-    if (!this.baseUrl || !this.isRegistered) {
+    if (!this.serverHost || !this.isRegistered) {
       console.log('Cannot start assignment check: not configured or not registered');
       return;
     }
@@ -202,7 +226,7 @@ class ApiService {
 
     console.log('=== STARTING ASSIGNMENT CHECK ===');
     console.log('API Type:', this.apiType);
-    console.log('Base URL:', this.baseUrl);
+    console.log('Base URL:', this.getBaseUrl());
 
     // CORRECTION: Activer directement la surveillance pour affichageDynamique
     if (this.apiType === 'affichageDynamique') {
@@ -251,7 +275,7 @@ class ApiService {
    * Démarre la vérification périodique des présentations par défaut
    */
   async startDefaultPresentationCheck(callback?: (presentation: DefaultPresentation) => void) {
-    if (!this.baseUrl || !this.isRegistered) {
+    if (!this.serverHost || !this.isRegistered) {
       console.log('Cannot start default presentation check: not configured or not registered');
       return;
     }
@@ -261,7 +285,7 @@ class ApiService {
 
     console.log('=== STARTING DEFAULT PRESENTATION CHECK ===');
     console.log('API Type:', this.apiType);
-    console.log('Base URL:', this.baseUrl);
+    console.log('Base URL:', this.getBaseUrl());
 
     // CORRECTION: Activer directement la surveillance pour affichageDynamique
     if (this.apiType === 'affichageDynamique') {
@@ -335,7 +359,7 @@ class ApiService {
    */
   async checkForAssignedPresentation(): Promise<AssignedPresentation | null> {
     try {
-      if (!this.baseUrl || !this.isRegistered || !this.assignmentCheckEnabled) {
+      if (!this.serverHost || !this.isRegistered || !this.assignmentCheckEnabled) {
         console.log('Assignment check disabled or not ready');
         return null;
       }
@@ -391,7 +415,7 @@ class ApiService {
    */
   async checkForDefaultPresentation(): Promise<DefaultPresentation | null> {
     try {
-      if (!this.baseUrl || !this.isRegistered || !this.defaultCheckEnabled) {
+      if (!this.serverHost || !this.isRegistered || !this.defaultCheckEnabled) {
         console.log('Default presentation check disabled or not ready');
         return null;
       }
@@ -500,11 +524,13 @@ class ApiService {
    */
   async debugDevice(): Promise<any> {
     try {
-      if (!this.baseUrl || !this.deviceId) {
+      if (!this.serverHost || !this.deviceId) {
         return {
           error: 'Device not configured',
           deviceId: this.deviceId,
-          baseUrl: this.baseUrl
+          serverHost: this.serverHost,
+          apiPath: this.apiPath,
+          uploadsPath: this.uploadsPath
         };
       }
 
@@ -516,7 +542,9 @@ class ApiService {
       return {
         error: 'Debug endpoint not available',
         deviceId: this.deviceId,
-        baseUrl: this.baseUrl,
+        serverHost: this.serverHost,
+        apiPath: this.apiPath,
+        uploadsPath: this.uploadsPath,
         isRegistered: this.isRegistered,
         assignmentCheckEnabled: this.assignmentCheckEnabled,
         defaultCheckEnabled: this.defaultCheckEnabled,
@@ -525,26 +553,34 @@ class ApiService {
     }
   }
 
-  async setServerUrl(url: string): Promise<boolean> {
+  async setServerConfig(config: ServerConfig): Promise<boolean> {
     try {
-      console.log('=== SETTING SERVER URL ===');
-      console.log('Input URL:', url);
+      console.log('=== SETTING SERVER CONFIG ===');
+      console.log('Input config:', config);
       
-      // Nettoyer l'URL et s'assurer qu'elle se termine par index.php
-      let cleanUrl = url.replace(/\/+$/, '');
+      // Nettoyer et valider la configuration
+      let cleanHost = config.host.replace(/\/+$/, '');
+      let cleanApiPath = config.apiPath.replace(/^\/+|\/+$/g, '') + '/';
+      let cleanUploadsPath = config.uploadsPath.replace(/^\/+|\/+$/g, '') + '/';
       
-      // Si l'URL ne se termine pas par index.php, l'ajouter
-      if (!cleanUrl.endsWith('index.php')) {
-        if (!cleanUrl.endsWith('/')) {
-          cleanUrl += '/';
-        }
-        cleanUrl += 'index.php';
+      // S'assurer que le host commence par http:// ou https://
+      if (!cleanHost.startsWith('http://') && !cleanHost.startsWith('https://')) {
+        cleanHost = 'http://' + cleanHost;
       }
       
-      console.log('Clean URL:', cleanUrl);
+      console.log('Clean config:', {
+        host: cleanHost,
+        apiPath: cleanApiPath,
+        uploadsPath: cleanUploadsPath
+      });
       
-      this.baseUrl = cleanUrl;
-      await AsyncStorage.setItem(STORAGE_KEYS.SERVER_URL, cleanUrl);
+      this.serverHost = cleanHost;
+      this.apiPath = cleanApiPath;
+      this.uploadsPath = cleanUploadsPath;
+      
+      await AsyncStorage.setItem(STORAGE_KEYS.SERVER_HOST, cleanHost);
+      await AsyncStorage.setItem(STORAGE_KEYS.API_PATH, cleanApiPath);
+      await AsyncStorage.setItem(STORAGE_KEYS.UPLOADS_PATH, cleanUploadsPath);
       
       // Réinitialiser le statut d'enregistrement pour le nouveau serveur
       this.isRegistered = false;
@@ -581,13 +617,17 @@ class ApiService {
       console.error('Connection test failed');
       return false;
     } catch (error) {
-      console.error('Error setting server URL:', error);
+      console.error('Error setting server config:', error);
       return false;
     }
   }
 
-  getServerUrl(): string {
-    return this.baseUrl;
+  getServerConfig(): ServerConfig {
+    return {
+      host: this.serverHost,
+      apiPath: this.apiPath,
+      uploadsPath: this.uploadsPath
+    };
   }
 
   getDeviceId(): string {
@@ -599,28 +639,19 @@ class ApiService {
   }
 
   /**
-   * Obtient l'URL de base du serveur pour les images
+   * Construit l'URL complète de l'API
+   */
+  private getBaseUrl(): string {
+    if (!this.serverHost) return '';
+    return `${this.serverHost}/${this.apiPath}index.php`;
+  }
+
+  /**
+   * Construit l'URL de base du serveur pour les images
    */
   private getBaseServerUrl(): string {
-    if (!this.baseUrl) return '';
-    
-    console.log('=== BUILDING BASE SERVER URL ===');
-    console.log('Original baseUrl:', this.baseUrl);
-    
-    // Supprimer /api/index.php ou /index.php de l'URL pour obtenir l'URL de base
-    let baseServerUrl = this.baseUrl;
-    
-    // Si l'URL contient /api/index.php, supprimer cette partie
-    if (baseServerUrl.includes('/api/index.php')) {
-      baseServerUrl = baseServerUrl.replace('/api/index.php', '');
-    }
-    // Sinon si elle contient juste /index.php, supprimer cette partie
-    else if (baseServerUrl.includes('/index.php')) {
-      baseServerUrl = baseServerUrl.replace('/index.php', '');
-    }
-    
-    console.log('Base server URL for images:', baseServerUrl);
-    return baseServerUrl;
+    if (!this.serverHost) return '';
+    return this.serverHost;
   }
 
   /**
@@ -781,14 +812,14 @@ class ApiService {
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    if (!this.baseUrl) {
-      throw new Error('URL du serveur non configurée');
+    if (!this.serverHost) {
+      throw new Error('Configuration serveur non définie');
     }
 
     // Construire l'URL correctement avec le bon endpoint
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const finalEndpoint = this.getEndpoint(cleanEndpoint);
-    const url = `${this.baseUrl}${finalEndpoint}`;
+    const url = `${this.getBaseUrl()}${finalEndpoint}`;
     
     console.log('=== API REQUEST ===');
     console.log('Original endpoint:', cleanEndpoint);
@@ -905,7 +936,7 @@ class ApiService {
     try {
       console.log('=== REGISTERING DEVICE ===');
       console.log('Device ID:', this.deviceId);
-      console.log('Server URL:', this.baseUrl);
+      console.log('Server URL:', this.getBaseUrl());
       console.log('API Type:', this.apiType);
       
       const deviceInfo: DeviceRegistration = {
@@ -921,7 +952,8 @@ class ApiService {
           'presentation_mode',
           'fullscreen',
           'auto_play',
-          'loop_mode'
+          'loop_mode',
+          'wake_lock'
         ]
       };
 
@@ -1050,15 +1082,15 @@ class ApiService {
           }
         }
         
-        if (imageUrl && this.baseUrl) {
+        if (imageUrl && this.serverHost) {
           const baseServerUrl = this.getBaseServerUrl();
           const imagePath = slide.media_path || slide.image_path || '';
           
           if (imagePath) {
-            if (imagePath.includes('uploads/slides/')) {
+            if (imagePath.includes(this.uploadsPath)) {
               imageUrl = `${baseServerUrl}/${imagePath}`;
             } else {
-              imageUrl = `${baseServerUrl}/uploads/slides/${imagePath}`;
+              imageUrl = `${baseServerUrl}/${this.uploadsPath}${imagePath}`;
             }
           }
         }
@@ -1121,15 +1153,17 @@ class ApiService {
     
     const baseServerUrl = this.getBaseServerUrl();
     
-    if (imagePath.includes('uploads/slides/')) {
+    if (imagePath.includes(this.uploadsPath)) {
       return `${baseServerUrl}/${imagePath}`;
     } else {
-      return `${baseServerUrl}/uploads/slides/${imagePath}`;
+      return `${baseServerUrl}/${this.uploadsPath}${imagePath}`;
     }
   }
 
   async getDebugInfo(): Promise<{
-    serverUrl: string;
+    serverHost: string;
+    apiPath: string;
+    uploadsPath: string;
     deviceId: string;
     isRegistered: boolean;
     hasToken: boolean;
@@ -1140,7 +1174,9 @@ class ApiService {
     apiType: string;
   }> {
     return {
-      serverUrl: this.baseUrl,
+      serverHost: this.serverHost,
+      apiPath: this.apiPath,
+      uploadsPath: this.uploadsPath,
       deviceId: this.deviceId,
       isRegistered: this.isRegistered,
       hasToken: !!this.enrollmentToken,

@@ -22,7 +22,9 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.ACCESS_WIFI_STATE",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.DISABLE_KEYGUARD",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ],
       "intentFilters": [
         {
@@ -45,6 +47,7 @@
       "expo-router", 
       "expo-font", 
       "expo-web-browser",
+      "expo-keep-awake",
       [
         "expo-build-properties",
         {

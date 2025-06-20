@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Monitor, Wifi, WifiOff, RefreshCw, Play, Settings, Repeat, Star } from 'lucide-react-native';
 import { apiService, Presentation, AssignedPresentation, DefaultPresentation } from '@/services/ApiService';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +33,23 @@ export default function HomeScreen() {
 
   useEffect(() => {
     initializeApp();
+    
+    // Activer le Wake Lock pour empêcher la mise en veille
+    activateKeepAwakeAsync('presentation-kiosk')
+      .then(() => {
+        console.log('✅ Wake Lock activé - L\'écran restera allumé');
+      })
+      .catch((error) => {
+        console.warn('⚠️ Impossible d\'activer le Wake Lock:', error);
+      });
+
+    // Nettoyer le Wake Lock au démontage du composant
+    return () => {
+      deactivateKeepAwake('presentation-kiosk');
+      if (autoLaunchDefaultTimer) {
+        clearTimeout(autoLaunchDefaultTimer);
+      }
+    };
   }, []);
 
   // Nettoyage du timer au démontage du composant
@@ -47,10 +65,10 @@ export default function HomeScreen() {
     setLoading(true);
     await apiService.initialize();
     
-    const serverUrl = apiService.getServerUrl();
-    console.log('Current server URL:', serverUrl);
+    const serverConfig = apiService.getServerConfig();
+    console.log('Current server config:', serverConfig);
     
-    if (!serverUrl) {
+    if (!serverConfig.host) {
       setConnectionStatus('not_configured');
       setLoading(false);
       return;
@@ -81,15 +99,15 @@ export default function HomeScreen() {
   };
 
   const checkConnection = async () => {
-    const serverUrl = apiService.getServerUrl();
-    if (!serverUrl) {
+    const serverConfig = apiService.getServerConfig();
+    if (!serverConfig.host) {
       setConnectionStatus('not_configured');
       return;
     }
     
     setConnectionStatus('testing');
     try {
-      console.log('Testing connection to:', serverUrl);
+      console.log('Testing connection to:', serverConfig);
       const isConnected = await apiService.testConnection();
       console.log('Connection test result:', isConnected);
       setConnectionStatus(isConnected ? 'connected' : 'disconnected');
@@ -100,14 +118,14 @@ export default function HomeScreen() {
   };
 
   const loadPresentations = async () => {
-    const serverUrl = apiService.getServerUrl();
-    if (!serverUrl) {
+    const serverConfig = apiService.getServerConfig();
+    if (!serverConfig.host) {
       setConnectionStatus('not_configured');
       return;
     }
     
     try {
-      console.log('Loading presentations from:', serverUrl);
+      console.log('Loading presentations from:', serverConfig);
       const data = await apiService.getPresentations();
       console.log('Presentations loaded:', data.length);
       setPresentations(data);
@@ -419,11 +437,11 @@ export default function HomeScreen() {
           <Settings size={16} color="#9ca3af" />
         </View>
         <Text style={styles.serverUrl}>
-          {apiService.getServerUrl() || 'Cliquez pour configurer'}
+          {apiService.getServerConfig().host || 'Cliquez pour configurer'}
         </Text>
         {connectionStatus === 'not_configured' && (
           <Text style={styles.configHint}>
-            Configurez l'URL de votre serveur pour commencer
+            Configurez l'adresse de votre serveur pour commencer
           </Text>
         )}
         {assignmentCheckStarted && (
@@ -674,6 +692,7 @@ export default function HomeScreen() {
           <RefreshCw size={48} color="#ffffff" />
           <Text style={styles.loadingText}>Initialisation de l'application...</Text>
           <Text style={styles.loadingSubtext}>Vérification des assignations...</Text>
+          <Text style={styles.loadingSubtext}>🔒 Wake Lock activé - Écran toujours allumé</Text>
         </LinearGradient>
       </View>
     );
@@ -737,7 +756,7 @@ export default function HomeScreen() {
               Présentations disponibles ({presentations.length})
             </Text>
             <Text style={styles.sectionSubtitle}>
-              🔄 Lecture automatique en boucle activée
+              🔄 Lecture automatique en boucle activée • 🔒 Écran toujours allumé
             </Text>
           </View>
           
@@ -746,7 +765,7 @@ export default function HomeScreen() {
               <Settings size={64} color="#6b7280" />
               <Text style={styles.configTitle}>Configuration requise</Text>
               <Text style={styles.configMessage}>
-                Configurez l'URL de votre serveur pour accéder aux présentations
+                Configurez l'adresse de votre serveur pour accéder aux présentations
               </Text>
               <TouchableOpacity
                 style={styles.configButton}
@@ -765,7 +784,7 @@ export default function HomeScreen() {
               <Text style={styles.disconnectedTitle}>Connexion impossible</Text>
               <Text style={styles.disconnectedMessage}>
                 Impossible de se connecter au serveur. Vérifiez:
-                {'\n'}• L'URL du serveur dans les paramètres
+                {'\n'}• L'adresse du serveur dans les paramètres
                 {'\n'}• Que le serveur est accessible
                 {'\n'}• Votre connexion réseau
               </Text>
@@ -829,10 +848,11 @@ export default function HomeScreen() {
             <Text style={styles.infoTitle}>Application Enhanced</Text>
             <Text style={styles.infoText}>
               Cette application se connecte à votre serveur de présentations.
-              {'\n'}Serveur: {apiService.getServerUrl() || 'Non configuré'}
+              {'\n'}Serveur: {apiService.getServerConfig().host || 'Non configuré'}
               {'\n'}Device ID: {apiService.getDeviceId()}
               {'\n'}Surveillance: {assignmentCheckStarted ? 'Active' : 'Inactive'}
               {'\n'}Mode: Lecture automatique en boucle
+              {'\n'}🔒 Wake Lock: Écran toujours allumé
               {defaultPresentation && '\n'}Présentation par défaut: Configurée
             </Text>
           </LinearGradient>
@@ -920,10 +940,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
     borderWidth: 4,
     borderColor: '#ffffff',
-    transform: [{ scale: 1.1 }],
+    transform: [{scale: 1.1}],
     elevation: 8,
     shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
@@ -934,7 +954,7 @@ const styles = StyleSheet.create({
   },
   spinning: {
     // Animation de rotation pour l'icône de rafraîchissement
-    transform: [{ rotate: '360deg' }],
+    transform: [{rotate: '360deg'}],
   },
   statusCard: {
     backgroundColor: '#ffffff',
@@ -946,7 +966,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
@@ -994,7 +1014,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
@@ -1102,7 +1122,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
@@ -1182,16 +1202,16 @@ const styles = StyleSheet.create({
   focusedCard: {
     borderWidth: 4,
     borderColor: '#3b82f6',
-    transform: [{ scale: 1.05 }],
+    transform: [{scale: 1.05}],
     elevation: 16,
     shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: {width: 0, height: 8},
     shadowOpacity: 0.5,
     shadowRadius: 16,
   },
   focusedPlayButton: {
     backgroundColor: 'rgba(59, 130, 246, 0.8)',
-    transform: [{ scale: 1.1 }],
+    transform: [{scale: 1.1}],
   },
   configurationNeeded: {
     alignItems: 'center',
@@ -1200,7 +1220,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
@@ -1240,7 +1260,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
@@ -1298,7 +1318,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
@@ -1326,7 +1346,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
@@ -1356,7 +1376,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: {width: 0, height: 6},
     shadowOpacity: 0.4,
     shadowRadius: 12,
     maxWidth: 320,

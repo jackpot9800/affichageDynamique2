@@ -11,8 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Server, Wifi, WifiOff, Check, CircleAlert as AlertCircle, Monitor, Settings as SettingsIcon, RefreshCw, Trash2, UserPlus } from 'lucide-react-native';
-import { apiService } from '@/services/ApiService';
+import { Server, Wifi, WifiOff, Check, CircleAlert as AlertCircle, Monitor, Settings as SettingsIcon, RefreshCw, Trash2, UserPlus, Folder, Globe } from 'lucide-react-native';
+import { apiService, ServerConfig } from '@/services/ApiService';
 
 // Import conditionnel de TVEventHandler
 let TVEventHandler: any = null;
@@ -25,8 +25,10 @@ if (Platform.OS === 'android' || Platform.OS === 'ios') {
 }
 
 export default function SettingsScreen() {
-  const [serverUrl, setServerUrl] = useState('');
-  const [originalUrl, setOriginalUrl] = useState('');
+  const [serverHost, setServerHost] = useState('');
+  const [apiPath, setApiPath] = useState('api/');
+  const [uploadsPath, setUploadsPath] = useState('uploads/');
+  const [originalConfig, setOriginalConfig] = useState<ServerConfig>({ host: '', apiPath: 'api/', uploadsPath: 'uploads/' });
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [saving, setSaving] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -56,8 +58,13 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    setHasChanges(serverUrl !== originalUrl);
-  }, [serverUrl, originalUrl]);
+    const currentConfig = { host: serverHost, apiPath, uploadsPath };
+    setHasChanges(
+      currentConfig.host !== originalConfig.host ||
+      currentConfig.apiPath !== originalConfig.apiPath ||
+      currentConfig.uploadsPath !== originalConfig.uploadsPath
+    );
+  }, [serverHost, apiPath, uploadsPath, originalConfig]);
 
   // Configuration navigation Fire TV avec vérifications
   const setupFireTVNavigation = () => {
@@ -95,7 +102,7 @@ export default function SettingsScreen() {
   };
 
   const handleNavigateDown = () => {
-    const maxIndex = 6; // 0: input, 1: test, 2: save, 3: register, 4: refresh, 5: reset device, 6: reset settings
+    const maxIndex = 8; // 0-2: inputs, 3: test, 4: save, 5: register, 6: refresh, 7: reset device, 8: reset settings
     if (focusedIndex < maxIndex) {
       setFocusedIndex(focusedIndex + 1);
     }
@@ -110,35 +117,39 @@ export default function SettingsScreen() {
   const handleSelectAction = () => {
     switch (focusedIndex) {
       case 0:
-        // Input field - ne rien faire, laisser le clavier apparaître
-        break;
       case 1:
-        testConnection(serverUrl);
-        break;
       case 2:
+        // Input fields - ne rien faire, laisser le clavier apparaître
+        break;
+      case 3:
+        testConnection();
+        break;
+      case 4:
         if (hasChanges && !saving) {
           saveSettings();
         }
         break;
-      case 3:
+      case 5:
         registerDevice();
         break;
-      case 4:
+      case 6:
         loadDebugInfo();
         break;
-      case 5:
+      case 7:
         resetDevice();
         break;
-      case 6:
+      case 8:
         resetSettings();
         break;
     }
   };
 
   const loadCurrentSettings = () => {
-    const currentUrl = apiService.getServerUrl();
-    setServerUrl(currentUrl);
-    setOriginalUrl(currentUrl);
+    const currentConfig = apiService.getServerConfig();
+    setServerHost(currentConfig.host);
+    setApiPath(currentConfig.apiPath);
+    setUploadsPath(currentConfig.uploadsPath);
+    setOriginalConfig(currentConfig);
   };
 
   const loadDebugInfo = async () => {
@@ -150,69 +161,57 @@ export default function SettingsScreen() {
     }
   };
 
-  const testConnection = async (url: string) => {
-    if (!url.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer une URL de serveur valide.');
+  const testConnection = async () => {
+    if (!serverHost.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer une adresse serveur valide.');
       return;
     }
 
     setConnectionStatus('testing');
     try {
-      const testUrl = url.replace(/\/+$/, '');
-      const finalUrl = testUrl.endsWith('index.php') ? testUrl : `${testUrl}/index.php`;
+      // Créer une configuration temporaire pour le test
+      const tempConfig: ServerConfig = {
+        host: serverHost.trim(),
+        apiPath: apiPath.trim() || 'api/',
+        uploadsPath: uploadsPath.trim() || 'uploads/'
+      };
       
-      console.log('Testing connection to:', finalUrl);
+      console.log('Testing connection with config:', tempConfig);
       
-      const response = await fetch(`${finalUrl}/version`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': 'PresentationKiosk/2.0 (FireTV)',
-        },
-      });
+      // Sauvegarder temporairement la configuration pour le test
+      const success = await apiService.setServerConfig(tempConfig);
       
-      console.log('Test response status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Test response data:', data);
+      if (success) {
+        setConnectionStatus('success');
         
-        if (data.api_status === 'running' || data.status === 'running' || data.version) {
-          setConnectionStatus('success');
-          
-          Alert.alert(
-            'Test de connexion réussi',
-            `Connexion au serveur établie avec succès !\n\nVersion API: ${data.version || 'N/A'}\nStatut: ${data.api_status || data.status || 'running'}`,
-            [{ text: 'OK' }]
-          );
-          return true;
-        }
+        Alert.alert(
+          'Test de connexion réussi',
+          `Connexion au serveur établie avec succès !\n\nServeur: ${tempConfig.host}\nAPI: ${tempConfig.apiPath}\nUploads: ${tempConfig.uploadsPath}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        setConnectionStatus('error');
+        Alert.alert(
+          'Test de connexion échoué',
+          `Impossible de se connecter au serveur.\n\nVérifiez:\n• L'adresse du serveur\n• Les chemins API et uploads\n• Que le serveur est accessible`,
+          [{ text: 'OK' }]
+        );
       }
-      
-      setConnectionStatus('error');
-      Alert.alert(
-        'Test de connexion échoué',
-        `Impossible de se connecter au serveur.\n\nStatut HTTP: ${response.status}\n\nVérifiez l'URL et que le serveur est accessible.`,
-        [{ text: 'OK' }]
-      );
-      return false;
     } catch (error) {
       console.error('Connection test failed:', error);
       setConnectionStatus('error');
       
       Alert.alert(
         'Erreur de connexion',
-        `Impossible de joindre le serveur:\n\n${error instanceof Error ? error.message : 'Erreur réseau'}\n\nVérifiez votre connexion réseau et l'URL du serveur.`,
+        `Impossible de joindre le serveur:\n\n${error instanceof Error ? error.message : 'Erreur réseau'}\n\nVérifiez votre connexion réseau et la configuration.`,
         [{ text: 'OK' }]
       );
-      return false;
     }
   };
 
   const saveSettings = async () => {
-    if (!serverUrl.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer une URL de serveur valide.');
+    if (!serverHost.trim()) {
+      Alert.alert('Erreur', 'Veuillez entrer une adresse serveur valide.');
       return;
     }
 
@@ -220,12 +219,19 @@ export default function SettingsScreen() {
     
     try {
       console.log('=== SAVING SETTINGS ===');
-      console.log('Server URL:', serverUrl.trim());
       
-      const success = await apiService.setServerUrl(serverUrl.trim());
+      const config: ServerConfig = {
+        host: serverHost.trim(),
+        apiPath: apiPath.trim() || 'api/',
+        uploadsPath: uploadsPath.trim() || 'uploads/'
+      };
+      
+      console.log('Server config:', config);
+      
+      const success = await apiService.setServerConfig(config);
       
       if (success) {
-        setOriginalUrl(serverUrl.trim());
+        setOriginalConfig(config);
         setConnectionStatus('success');
         await loadDebugInfo();
         
@@ -238,7 +244,7 @@ export default function SettingsScreen() {
         setConnectionStatus('error');
         Alert.alert(
           'Erreur de sauvegarde',
-          'Impossible de sauvegarder la configuration. Vérifiez l\'URL et la disponibilité du serveur.',
+          'Impossible de sauvegarder la configuration. Vérifiez les paramètres et la disponibilité du serveur.',
           [{ text: 'OK' }]
         );
       }
@@ -256,10 +262,10 @@ export default function SettingsScreen() {
   };
 
   const registerDevice = async () => {
-    if (!serverUrl.trim()) {
+    if (!serverHost.trim()) {
       Alert.alert(
         'Configuration requise',
-        'Veuillez d\'abord configurer et sauvegarder l\'URL du serveur.',
+        'Veuillez d\'abord configurer et sauvegarder les paramètres du serveur.',
         [{ text: 'OK' }]
       );
       return;
@@ -296,7 +302,7 @@ export default function SettingsScreen() {
       console.error('Manual registration failed:', error);
       Alert.alert(
         'Erreur d\'enregistrement',
-        `Impossible d'enregistrer l'appareil:\n\n${error instanceof Error ? error.message : 'Erreur inconnue'}\n\nVérifiez votre connexion et l'URL du serveur.`,
+        `Impossible d'enregistrer l'appareil:\n\n${error instanceof Error ? error.message : 'Erreur inconnue'}\n\nVérifiez votre connexion et la configuration du serveur.`,
         [{ text: 'OK' }]
       );
     } finally {
@@ -345,14 +351,16 @@ export default function SettingsScreen() {
           text: 'Réinitialiser',
           style: 'destructive',
           onPress: async () => {
-            setServerUrl('');
+            setServerHost('');
+            setApiPath('api/');
+            setUploadsPath('uploads/');
             setConnectionStatus('idle');
             await apiService.resetDevice();
             await loadDebugInfo();
             
             Alert.alert(
               'Paramètres réinitialisés',
-              'La configuration a été effacée. Vous devez reconfigurer l\'URL du serveur.',
+              'La configuration a été effacée. Vous devez reconfigurer les paramètres du serveur.',
               [{ text: 'OK' }]
             );
           },
@@ -422,30 +430,82 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Configuration du serveur</Text>
           <Text style={styles.sectionDescription}>
-            Entrez l'URL complète de votre serveur de présentations
+            Configurez l'adresse de votre serveur et les chemins d'accès
           </Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>URL du serveur</Text>
+            <Text style={styles.inputLabel}>
+              <Globe size={16} color="#ffffff" /> Adresse du serveur
+            </Text>
             <TextInput
               style={[
                 styles.textInput,
                 focusedIndex === 0 && styles.focusedInput
               ]}
-              value={serverUrl}
-              onChangeText={setServerUrl}
-              placeholder="http://192.168.18.28/mods/livetv/api"
+              value={serverHost}
+              onChangeText={setServerHost}
+              placeholder="192.168.1.100 ou monserveur.local"
               placeholderTextColor="#6b7280"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
               accessible={true}
-              accessibilityLabel="URL du serveur"
-              accessibilityHint="Entrez l'adresse de votre serveur de présentations"
+              accessibilityLabel="Adresse du serveur"
+              accessibilityHint="Entrez l'adresse IP ou le nom de domaine de votre serveur"
               onFocus={() => setFocusedIndex(0)}
             />
             <Text style={styles.inputHint}>
-              L'application ajoutera automatiquement /index.php si nécessaire
+              Adresse IP (ex: 192.168.1.100) ou nom de domaine (ex: monserveur.local)
+            </Text>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>
+              <Server size={16} color="#ffffff" /> Chemin API
+            </Text>
+            <TextInput
+              style={[
+                styles.textInput,
+                focusedIndex === 1 && styles.focusedInput
+              ]}
+              value={apiPath}
+              onChangeText={setApiPath}
+              placeholder="api/"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessible={true}
+              accessibilityLabel="Chemin API"
+              accessibilityHint="Chemin vers l'API sur le serveur"
+              onFocus={() => setFocusedIndex(1)}
+            />
+            <Text style={styles.inputHint}>
+              Chemin relatif vers l'API (ex: api/, mods/livetv/api/)
+            </Text>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>
+              <Folder size={16} color="#ffffff" /> Chemin uploads
+            </Text>
+            <TextInput
+              style={[
+                styles.textInput,
+                focusedIndex === 2 && styles.focusedInput
+              ]}
+              value={uploadsPath}
+              onChangeText={setUploadsPath}
+              placeholder="uploads/"
+              placeholderTextColor="#6b7280"
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessible={true}
+              accessibilityLabel="Chemin uploads"
+              accessibilityHint="Chemin vers le dossier des médias"
+              onFocus={() => setFocusedIndex(2)}
+            />
+            <Text style={styles.inputHint}>
+              Chemin relatif vers les médias (ex: uploads/, mods/livetv/uploads/)
             </Text>
           </View>
 
@@ -456,15 +516,15 @@ export default function SettingsScreen() {
               style={[
                 styles.button, 
                 styles.testButton,
-                (!serverUrl.trim() || connectionStatus === 'testing') && styles.buttonDisabled,
-                focusedIndex === 1 && styles.focusedButton
+                (!serverHost.trim() || connectionStatus === 'testing') && styles.buttonDisabled,
+                focusedIndex === 3 && styles.focusedButton
               ]}
-              onPress={() => testConnection(serverUrl)}
-              disabled={!serverUrl.trim() || connectionStatus === 'testing'}
+              onPress={testConnection}
+              disabled={!serverHost.trim() || connectionStatus === 'testing'}
               accessible={true}
               accessibilityLabel="Tester la connexion"
               accessibilityRole="button"
-              onFocus={() => setFocusedIndex(1)}
+              onFocus={() => setFocusedIndex(3)}
             >
               {connectionStatus === 'testing' ? (
                 <ActivityIndicator size="small" color="#ffffff" />
@@ -479,14 +539,14 @@ export default function SettingsScreen() {
                 styles.button,
                 styles.saveButton,
                 (!hasChanges || saving) && styles.buttonDisabled,
-                focusedIndex === 2 && styles.focusedButton
+                focusedIndex === 4 && styles.focusedButton
               ]}
               onPress={saveSettings}
               disabled={!hasChanges || saving}
               accessible={true}
               accessibilityLabel="Sauvegarder la configuration"
               accessibilityRole="button"
-              onFocus={() => setFocusedIndex(2)}
+              onFocus={() => setFocusedIndex(4)}
             >
               {saving ? (
                 <ActivityIndicator size="small" color="#ffffff" />
@@ -509,14 +569,14 @@ export default function SettingsScreen() {
               styles.button, 
               styles.registerButton,
               registering && styles.buttonDisabled,
-              focusedIndex === 3 && styles.focusedButton
+              focusedIndex === 5 && styles.focusedButton
             ]}
             onPress={registerDevice}
             disabled={registering}
             accessible={true}
             accessibilityLabel="Enregistrer l'appareil"
             accessibilityRole="button"
-            onFocus={() => setFocusedIndex(3)}
+            onFocus={() => setFocusedIndex(5)}
           >
             {registering ? (
               <ActivityIndicator size="small" color="#ffffff" />
@@ -552,6 +612,24 @@ export default function SettingsScreen() {
                   <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>ID de l'appareil</Text>
                     <Text style={styles.infoValue}>{debugInfo.deviceId}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.infoRow}>
+                  <Globe size={20} color="#9ca3af" />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Serveur configuré</Text>
+                    <Text style={styles.infoValue}>{debugInfo.serverHost || 'Non configuré'}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.infoRow}>
+                  <Folder size={20} color="#9ca3af" />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Chemins configurés</Text>
+                    <Text style={styles.infoValue}>
+                      API: {debugInfo.apiPath} • Uploads: {debugInfo.uploadsPath}
+                    </Text>
                   </View>
                 </View>
                 
@@ -606,13 +684,13 @@ export default function SettingsScreen() {
             style={[
               styles.button, 
               styles.actionButton,
-              focusedIndex === 4 && styles.focusedButton
+              focusedIndex === 6 && styles.focusedButton
             ]}
             onPress={() => loadDebugInfo()}
             accessible={true}
             accessibilityLabel="Actualiser les informations"
             accessibilityRole="button"
-            onFocus={() => setFocusedIndex(4)}
+            onFocus={() => setFocusedIndex(6)}
           >
             <RefreshCw size={16} color="#3b82f6" />
             <Text style={[styles.buttonText, { color: '#3b82f6' }]}>
@@ -624,13 +702,13 @@ export default function SettingsScreen() {
             style={[
               styles.button, 
               styles.actionButton,
-              focusedIndex === 5 && styles.focusedButton
+              focusedIndex === 7 && styles.focusedButton
             ]}
             onPress={resetDevice}
             accessible={true}
             accessibilityLabel="Réinitialiser l'appareil"
             accessibilityRole="button"
-            onFocus={() => setFocusedIndex(5)}
+            onFocus={() => setFocusedIndex(7)}
           >
             <Trash2 size={16} color="#f59e0b" />
             <Text style={[styles.buttonText, { color: '#f59e0b' }]}>
@@ -642,13 +720,13 @@ export default function SettingsScreen() {
             style={[
               styles.button, 
               styles.resetButton,
-              focusedIndex === 6 && styles.focusedButton
+              focusedIndex === 8 && styles.focusedButton
             ]}
             onPress={resetSettings}
             accessible={true}
             accessibilityLabel="Réinitialiser les paramètres"
             accessibilityRole="button"
-            onFocus={() => setFocusedIndex(6)}
+            onFocus={() => setFocusedIndex(8)}
           >
             <AlertCircle size={16} color="#ef4444" />
             <Text style={[styles.buttonText, { color: '#ef4444' }]}>
@@ -660,29 +738,36 @@ export default function SettingsScreen() {
         <View style={styles.helpSection}>
           <Text style={styles.helpTitle}>Guide de configuration Enhanced</Text>
           <Text style={styles.helpText}>
-            <Text style={styles.helpBold}>1. URL du serveur :</Text>{`\n`}
-            Entrez l'URL de base de votre API (sans /index.php){`\n`}
-            Exemple: http://192.168.18.28/mods/livetv/api{`\n\n`}
+            <Text style={styles.helpBold}>1. Adresse du serveur :</Text>{`\n`}
+            Entrez seulement l'IP ou le nom de domaine (ex: 192.168.1.100){`\n`}
+            L'application construira automatiquement les URLs complètes{`\n\n`}
             
-            <Text style={styles.helpBold}>2. Test de connexion :</Text>{`\n`}
+            <Text style={styles.helpBold}>2. Chemin API :</Text>{`\n`}
+            • Par défaut: api/{`\n`}
+            • Si votre API est dans un sous-dossier: mods/livetv/api/{`\n`}
+            • Si à la racine: laissez vide ou mettez juste /{`\n\n`}
+            
+            <Text style={styles.helpBold}>3. Chemin uploads :</Text>{`\n`}
+            • Par défaut: uploads/{`\n`}
+            • Chemin relatif vers vos médias depuis la racine web{`\n`}
+            • Exemple: mods/livetv/uploads/{`\n\n`}
+            
+            <Text style={styles.helpBold}>4. Exemple de configuration :</Text>{`\n`}
+            • Serveur: 192.168.1.100{`\n`}
+            • API: mods/livetv/api/{`\n`}
+            • Uploads: mods/livetv/uploads/{`\n`}
+            → URL API: http://192.168.1.100/mods/livetv/api/index.php{`\n`}
+            → URL médias: http://192.168.1.100/mods/livetv/uploads/{`\n\n`}
+            
+            <Text style={styles.helpBold}>5. Test et sauvegarde :</Text>{`\n`}
             • Testez toujours avant de sauvegarder{`\n`}
-            • Vérifiez que le serveur répond correctement{`\n`}
-            • Le test valide la version de l'API{`\n\n`}
-            
-            <Text style={styles.helpBold}>3. Enregistrement :</Text>{`\n`}
             • L'enregistrement se fait automatiquement lors de la sauvegarde{`\n`}
-            • Utilisez le bouton manuel si l'automatique échoue{`\n`}
-            • Un appareil déjà enregistré peut être forcé à se réenregistrer{`\n\n`}
+            • Utilisez le bouton manuel si l'automatique échoue{`\n\n`}
             
-            <Text style={styles.helpBold}>4. Surveillance :</Text>{`\n`}
-            • Assignations: Présentations assignées spécifiquement{`\n`}
-            • Par défaut: Présentation par défaut de l'appareil{`\n`}
-            • Les deux surveillances fonctionnent en parallèle{`\n\n`}
-            
-            <Text style={styles.helpBold}>5. En cas de problème :</Text>{`\n`}
+            <Text style={styles.helpBold}>6. En cas de problème :</Text>{`\n`}
             • Vérifiez que l'appareil et le serveur sont sur le même réseau{`\n`}
             • Testez l'URL dans un navigateur web{`\n`}
-            • Utilisez le bouton d'enregistrement manuel{`\n`}
+            • Vérifiez les chemins d'accès sur votre serveur{`\n`}
             • Consultez les logs PHP de votre serveur
           </Text>
         </View>
@@ -745,6 +830,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   textInput: {
     backgroundColor: '#1a1a1a',

@@ -16,6 +16,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, Monitor, Clock, CircleAlert as AlertCircle, RefreshCw, RotateCcw, Repeat } from 'lucide-react-native';
 import { apiService, PresentationDetails, Slide } from '@/services/ApiService';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 const { width, height } = Dimensions.get('window');
 
@@ -49,6 +50,15 @@ export default function PresentationScreen() {
   useEffect(() => {
     loadPresentation();
     
+    // Activer le Wake Lock pour empêcher la mise en veille
+    activateKeepAwakeAsync('presentation-view')
+      .then(() => {
+        console.log('✅ Wake Lock activé pour la présentation - L\'écran restera allumé');
+      })
+      .catch((error) => {
+        console.warn('⚠️ Impossible d\'activer le Wake Lock pour la présentation:', error);
+      });
+    
     // Configurer selon les paramètres d'assignation
     if (auto_play === 'true') {
       console.log('Auto-play enabled from assignment');
@@ -79,6 +89,9 @@ export default function PresentationScreen() {
           console.log('Error disabling TV event handler:', error);
         }
       }
+      
+      // Désactiver le Wake Lock au démontage
+      deactivateKeepAwake('presentation-view');
     };
   }, []);
 
@@ -452,6 +465,7 @@ export default function PresentationScreen() {
         {auto_play === 'true' && (
           <Text style={styles.autoPlayText}>Lecture automatique activée</Text>
         )}
+        <Text style={styles.wakeText}>🔒 Wake Lock activé - Écran toujours allumé</Text>
       </View>
     );
   }
@@ -498,7 +512,7 @@ export default function PresentationScreen() {
         <ScrollView style={styles.debugContainer}>
           <Text style={styles.debugTitle}>Informations de debug:</Text>
           <Text style={styles.debugText}>ID: {id}</Text>
-          <Text style={styles.debugText}>Serveur: {apiService.getServerUrl()}</Text>
+          <Text style={styles.debugText}>Serveur: {apiService.getServerConfig().host}</Text>
           <Text style={styles.debugText}>Assignée: {assigned === 'true' ? 'Oui' : 'Non'}</Text>
           <Text style={styles.debugText}>Auto-play: {auto_play === 'true' ? 'Oui' : 'Non'}</Text>
           <Text style={styles.debugText}>Loop: {loop_mode === 'true' ? 'Oui' : 'Non'}</Text>
@@ -588,6 +602,10 @@ export default function PresentationScreen() {
             <Text style={styles.autoPlayText}>AUTO</Text>
           </View>
         )}
+        
+        <View style={styles.wakeLockIndicator}>
+          <Text style={styles.wakeLockText}>🔒 ÉCRAN ACTIF</Text>
+        </View>
       </TouchableOpacity>
 
       {showControls && (
@@ -774,6 +792,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 4,
   },
+  wakeText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -916,6 +940,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  assignedText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   autoPlayIndicator: {
     position: 'absolute',
     top: 70,
@@ -927,6 +956,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  autoPlayText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  wakeLockIndicator: {
+    position: 'absolute',
+    top: 120,
+    left: 20,
+    backgroundColor: 'rgba(59, 130, 246, 0.9)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  wakeLockText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   controlsOverlay: {
     position: 'absolute',
