@@ -86,7 +86,7 @@ class ApiService {
   private onDefaultPresentationCallback: ((presentation: DefaultPresentation) => void) | null = null;
   private assignmentCheckEnabled: boolean = false;
   private defaultCheckEnabled: boolean = false;
-  private apiType: 'standard' | 'affichageDynamique' = 'standard';
+  private apiType: 'standard' | 'affichageDynamique' = 'affichageDynamique'; // Par défaut affichageDynamique
 
   async initialize() {
     try {
@@ -125,6 +125,7 @@ class ApiService {
       console.log('Server URL:', this.baseUrl);
       console.log('Device ID:', this.deviceId);
       console.log('Is Registered:', this.isRegistered);
+      console.log('API Type:', this.apiType);
       
     } catch (error) {
       console.error('Error initializing API service:', error);
@@ -155,8 +156,8 @@ class ApiService {
         console.log('✅ Detected standard API');
       }
     } catch (error) {
-      console.log('⚠️ Could not detect API type, using standard');
-      this.apiType = 'standard';
+      console.log('⚠️ Could not detect API type, using affichageDynamique by default');
+      this.apiType = 'affichageDynamique';
     }
   }
 
@@ -483,7 +484,7 @@ class ApiService {
         return false;
       }
       
-      const endpoint = `/device/presentation/${presentationId}/viewed`;
+      const endpoint = `/appareil/presentation/${presentationId}/vue`; // Endpoint affichageDynamique
       const response = await this.makeRequest<{ success: boolean }>(endpoint, {
         method: 'POST',
       });
@@ -508,7 +509,7 @@ class ApiService {
       }
 
       console.log('=== DEBUGGING DEVICE VIA API ===');
-      const response = await this.makeRequest<any>(`/debug/device/${this.deviceId}`);
+      const response = await this.makeRequest<any>(`/debug/appareil/${this.deviceId}`);
       return response;
     } catch (error) {
       console.log('Debug endpoint not available:', error);
@@ -550,7 +551,7 @@ class ApiService {
       this.enrollmentToken = '';
       this.assignmentCheckEnabled = false;
       this.defaultCheckEnabled = false;
-      this.apiType = 'standard';
+      this.apiType = 'affichageDynamique'; // Par défaut affichageDynamique
       await AsyncStorage.removeItem(STORAGE_KEYS.DEVICE_REGISTERED);
       await AsyncStorage.removeItem(STORAGE_KEYS.ENROLLMENT_TOKEN);
       await AsyncStorage.removeItem(STORAGE_KEYS.ASSIGNED_PRESENTATION);
@@ -883,7 +884,8 @@ class ApiService {
       
       const isConnected = response.status === 'running' || 
                          response.api_status === 'running' || 
-                         response.version !== undefined;
+                         response.version !== undefined ||
+                         response.database === 'affichageDynamique';
       
       console.log('Connection test result:', isConnected);
       
@@ -1160,7 +1162,7 @@ class ApiService {
     this.enrollmentToken = '';
     this.assignmentCheckEnabled = false;
     this.defaultCheckEnabled = false;
-    this.apiType = 'standard';
+    this.apiType = 'affichageDynamique';
     
     await AsyncStorage.removeItem(STORAGE_KEYS.DEVICE_REGISTERED);
     await AsyncStorage.removeItem(STORAGE_KEYS.ENROLLMENT_TOKEN);
