@@ -47,16 +47,7 @@
       "expo-router", 
       "expo-font", 
       "expo-web-browser",
-      "expo-keep-awake",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true,
-            "networkSecurityConfig": "@xml/network_security_config"
-          }
-        }
-      ]
+      "expo-keep-awake"
     ],
     "experiments": {
       "typedRoutes": true
