@@ -199,24 +199,34 @@ class ApiService {
     // Détecter le type d'API d'abord
     await this.detectApiType();
 
-    // Vérifier si l'endpoint existe
-    console.log('=== CHECKING IF ASSIGNMENT ENDPOINT EXISTS ===');
-    try {
-      const testResponse = await this.makeRequest<any>('/version');
-      const assignmentEndpoint = this.getEndpoint('/device/assigned-presentation');
-      
-      if (testResponse.endpoints && testResponse.endpoints[`GET ${assignmentEndpoint}`]) {
-        console.log('✅ Assignment endpoint is available');
-        this.assignmentCheckEnabled = true;
-      } else {
-        console.log('⚠️ Assignment endpoint not available in this API version');
+    console.log('=== STARTING ASSIGNMENT CHECK ===');
+    console.log('API Type:', this.apiType);
+    console.log('Base URL:', this.baseUrl);
+
+    // CORRECTION: Activer directement la surveillance pour affichageDynamique
+    if (this.apiType === 'affichageDynamique') {
+      console.log('✅ Enabling assignment check for affichageDynamique API');
+      this.assignmentCheckEnabled = true;
+    } else {
+      // Pour l'API standard, vérifier si l'endpoint existe
+      console.log('=== CHECKING IF ASSIGNMENT ENDPOINT EXISTS (Standard API) ===');
+      try {
+        const testResponse = await this.makeRequest<any>('/version');
+        const assignmentEndpoint = this.getEndpoint('/device/assigned-presentation');
+        
+        if (testResponse.endpoints && testResponse.endpoints[`GET ${assignmentEndpoint}`]) {
+          console.log('✅ Assignment endpoint is available');
+          this.assignmentCheckEnabled = true;
+        } else {
+          console.log('⚠️ Assignment endpoint not available in this API version');
+          this.assignmentCheckEnabled = false;
+          return;
+        }
+      } catch (error) {
+        console.log('⚠️ Could not verify endpoint availability, disabling assignment check');
         this.assignmentCheckEnabled = false;
         return;
       }
-    } catch (error) {
-      console.log('⚠️ Could not verify endpoint availability, disabling assignment check');
-      this.assignmentCheckEnabled = false;
-      return;
     }
 
     this.onAssignedPresentationCallback = callback || null;
@@ -224,16 +234,16 @@ class ApiService {
     // Vérifier immédiatement
     this.checkForAssignedPresentation();
 
-    // Puis vérifier toutes les 60 secondes
+    // Puis vérifier toutes les 15 secondes pour les assignations (plus fréquent)
     this.assignmentCheckInterval = setInterval(async () => {
       try {
         await this.checkForAssignedPresentation();
       } catch (error) {
         console.log('Assignment check failed:', error);
       }
-    }, 60000);
+    }, 15000); // 15 secondes pour une réactivité maximale
 
-    console.log('Assignment check started');
+    console.log('✅ Assignment check started with 15s interval');
   }
 
   /**
@@ -248,24 +258,34 @@ class ApiService {
     // Détecter le type d'API d'abord
     await this.detectApiType();
 
-    // Vérifier si l'endpoint existe
-    console.log('=== CHECKING IF DEFAULT PRESENTATION ENDPOINT EXISTS ===');
-    try {
-      const testResponse = await this.makeRequest<any>('/version');
-      const defaultEndpoint = this.getEndpoint('/device/default-presentation');
-      
-      if (testResponse.endpoints && testResponse.endpoints[`GET ${defaultEndpoint}`]) {
-        console.log('✅ Default presentation endpoint is available');
-        this.defaultCheckEnabled = true;
-      } else {
-        console.log('⚠️ Default presentation endpoint not available in this API version');
+    console.log('=== STARTING DEFAULT PRESENTATION CHECK ===');
+    console.log('API Type:', this.apiType);
+    console.log('Base URL:', this.baseUrl);
+
+    // CORRECTION: Activer directement la surveillance pour affichageDynamique
+    if (this.apiType === 'affichageDynamique') {
+      console.log('✅ Enabling default presentation check for affichageDynamique API');
+      this.defaultCheckEnabled = true;
+    } else {
+      // Pour l'API standard, vérifier si l'endpoint existe
+      console.log('=== CHECKING IF DEFAULT PRESENTATION ENDPOINT EXISTS (Standard API) ===');
+      try {
+        const testResponse = await this.makeRequest<any>('/version');
+        const defaultEndpoint = this.getEndpoint('/device/default-presentation');
+        
+        if (testResponse.endpoints && testResponse.endpoints[`GET ${defaultEndpoint}`]) {
+          console.log('✅ Default presentation endpoint is available');
+          this.defaultCheckEnabled = true;
+        } else {
+          console.log('⚠️ Default presentation endpoint not available in this API version');
+          this.defaultCheckEnabled = false;
+          return;
+        }
+      } catch (error) {
+        console.log('⚠️ Could not verify endpoint availability, disabling default presentation check');
         this.defaultCheckEnabled = false;
         return;
       }
-    } catch (error) {
-      console.log('⚠️ Could not verify endpoint availability, disabling default presentation check');
-      this.defaultCheckEnabled = false;
-      return;
     }
 
     this.onDefaultPresentationCallback = callback || null;
@@ -273,16 +293,16 @@ class ApiService {
     // Vérifier immédiatement
     this.checkForDefaultPresentation();
 
-    // Puis vérifier toutes les 120 secondes
+    // Puis vérifier toutes les 30 secondes pour les présentations par défaut
     this.defaultCheckInterval = setInterval(async () => {
       try {
         await this.checkForDefaultPresentation();
       } catch (error) {
         console.log('Default presentation check failed:', error);
       }
-    }, 120000);
+    }, 30000);
 
-    console.log('Default presentation check started');
+    console.log('✅ Default presentation check started with 30s interval');
   }
 
   /**
@@ -322,12 +342,13 @@ class ApiService {
       console.log('=== CHECKING FOR ASSIGNED PRESENTATION ===');
       const endpoint = this.getEndpoint('/device/assigned-presentation');
       console.log('Using endpoint:', endpoint);
+      console.log('API Type:', this.apiType);
       
       const response = await this.makeRequest<ApiResponse<AssignedPresentation>>(endpoint);
       const assignedPresentation = response.assigned_presentation;
 
       if (assignedPresentation) {
-        console.log('Found assigned presentation:', {
+        console.log('✅ Found assigned presentation:', {
           presentation_id: assignedPresentation.presentation_id,
           auto_play: assignedPresentation.auto_play,
           loop_mode: assignedPresentation.loop_mode

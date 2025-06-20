@@ -144,53 +144,22 @@ export default function HomeScreen() {
         
         setAssignedPresentation(assigned);
         
-        if (assigned.auto_play) {
-          console.log('=== AUTO-PLAY ENABLED, SHOWING ALERT AND AUTO-LAUNCHING ===');
-          
-          Alert.alert(
-            'Présentation assignée',
-            `Une présentation vous a été assignée: "${assigned.presentation_name}"\n\nElle va se lancer automatiquement dans 3 secondes.`,
-            [
-              {
-                text: 'Lancer maintenant',
-                onPress: () => {
-                  console.log('User chose to launch immediately');
-                  launchAssignedPresentation(assigned);
-                },
-              },
-              {
-                text: 'Annuler',
-                style: 'cancel',
-                onPress: () => {
-                  console.log('User cancelled auto-launch');
-                },
-              },
-            ],
-            { cancelable: true }
-          );
-          
-          setTimeout(() => {
-            console.log('=== AUTO-LAUNCHING AFTER TIMEOUT ===');
-            launchAssignedPresentation(assigned);
-          }, 3000);
-        } else {
-          console.log('=== AUTO-PLAY DISABLED, SHOWING NOTIFICATION ONLY ===');
-          
-          Alert.alert(
-            'Nouvelle présentation disponible',
-            `Une présentation vous a été assignée: "${assigned.presentation_name}"\n\nVoulez-vous la voir maintenant ?`,
-            [
-              {
-                text: 'Voir maintenant',
-                onPress: () => launchAssignedPresentation(assigned),
-              },
-              {
-                text: 'Plus tard',
-                style: 'cancel',
-              },
-            ]
-          );
+        // CORRECTION: Lancement automatique IMMÉDIAT pour les présentations assignées
+        console.log('=== AUTO-LAUNCHING ASSIGNED PRESENTATION IMMEDIATELY ===');
+        
+        // Annuler le timer de présentation par défaut si actif
+        if (autoLaunchDefaultTimer) {
+          clearTimeout(autoLaunchDefaultTimer);
+          setAutoLaunchDefaultTimer(null);
         }
+        
+        // Masquer la notification de présentation par défaut
+        setShowDefaultPresentationPrompt(false);
+        
+        // Lancer immédiatement la présentation assignée en mode boucle
+        setTimeout(() => {
+          launchAssignedPresentation(assigned);
+        }, 1000); // Délai minimal pour permettre l'affichage de l'interface
       });
 
       console.log('=== CHECKING FOR EXISTING ASSIGNMENT ===');
@@ -199,22 +168,22 @@ export default function HomeScreen() {
         console.log('=== FOUND EXISTING ASSIGNMENT ===', existing);
         setAssignedPresentation(existing);
         
-        if (existing.auto_play) {
-          Alert.alert(
-            'Présentation en attente',
-            `Une présentation est assignée à cet appareil: "${existing.presentation_name}"\n\nVoulez-vous la lancer maintenant ?`,
-            [
-              {
-                text: 'Lancer',
-                onPress: () => launchAssignedPresentation(existing),
-              },
-              {
-                text: 'Plus tard',
-                style: 'cancel',
-              },
-            ]
-          );
+        // CORRECTION: Lancement automatique immédiat pour les assignations existantes
+        console.log('=== AUTO-LAUNCHING EXISTING ASSIGNED PRESENTATION ===');
+        
+        // Annuler le timer de présentation par défaut si actif
+        if (autoLaunchDefaultTimer) {
+          clearTimeout(autoLaunchDefaultTimer);
+          setAutoLaunchDefaultTimer(null);
         }
+        
+        // Masquer la notification de présentation par défaut
+        setShowDefaultPresentationPrompt(false);
+        
+        // Lancer immédiatement
+        setTimeout(() => {
+          launchAssignedPresentation(existing);
+        }, 2000); // Délai légèrement plus long pour l'assignation existante
       }
     } catch (error) {
       console.log('=== ASSIGNMENT MONITORING FAILED ===');
@@ -247,21 +216,24 @@ export default function HomeScreen() {
         
         setDefaultPresentation(defaultPres);
         
-        // Afficher une notification discrète
-        setShowDefaultPresentationPrompt(true);
-        
-        // Masquer automatiquement après 10 secondes
-        setTimeout(() => {
-          setShowDefaultPresentationPrompt(false);
-        }, 10000);
+        // Ne pas afficher la notification si une présentation assignée est active
+        if (!assignedPresentation) {
+          // Afficher une notification discrète
+          setShowDefaultPresentationPrompt(true);
+          
+          // Masquer automatiquement après 10 secondes
+          setTimeout(() => {
+            setShowDefaultPresentationPrompt(false);
+          }, 10000);
 
-        // Auto-lancement après 30 secondes si aucune interaction
-        const timer = setTimeout(() => {
-          console.log('=== AUTO-LAUNCHING DEFAULT PRESENTATION AFTER TIMEOUT ===');
-          launchDefaultPresentation(defaultPres);
-        }, 30000);
-        
-        setAutoLaunchDefaultTimer(timer);
+          // Auto-lancement après 30 secondes si aucune interaction
+          const timer = setTimeout(() => {
+            console.log('=== AUTO-LAUNCHING DEFAULT PRESENTATION AFTER TIMEOUT ===');
+            launchDefaultPresentation(defaultPres);
+          }, 30000);
+          
+          setAutoLaunchDefaultTimer(timer);
+        }
       });
 
       console.log('=== CHECKING FOR EXISTING DEFAULT PRESENTATION ===');
@@ -270,16 +242,19 @@ export default function HomeScreen() {
         console.log('=== FOUND EXISTING DEFAULT PRESENTATION ===', existing);
         setDefaultPresentation(existing);
         
-        // Afficher immédiatement la notification pour la présentation par défaut existante
-        setShowDefaultPresentationPrompt(true);
-        
-        // Auto-lancement après 30 secondes
-        const timer = setTimeout(() => {
-          console.log('=== AUTO-LAUNCHING EXISTING DEFAULT PRESENTATION ===');
-          launchDefaultPresentation(existing);
-        }, 30000);
-        
-        setAutoLaunchDefaultTimer(timer);
+        // Ne pas afficher la notification si une présentation assignée est active
+        if (!assignedPresentation) {
+          // Afficher immédiatement la notification pour la présentation par défaut existante
+          setShowDefaultPresentationPrompt(true);
+          
+          // Auto-lancement après 30 secondes
+          const timer = setTimeout(() => {
+            console.log('=== AUTO-LAUNCHING EXISTING DEFAULT PRESENTATION ===');
+            launchDefaultPresentation(existing);
+          }, 30000);
+          
+          setAutoLaunchDefaultTimer(timer);
+        }
       }
     } catch (error) {
       console.log('=== DEFAULT PRESENTATION MONITORING FAILED ===');
@@ -309,9 +284,10 @@ export default function HomeScreen() {
     
     apiService.markAssignedPresentationAsViewed(assigned.presentation_id);
     
+    // CORRECTION: Forcer auto_play et loop_mode à true pour les présentations assignées
     const params = new URLSearchParams({
-      auto_play: assigned.auto_play.toString(),
-      loop_mode: assigned.loop_mode.toString(),
+      auto_play: 'true', // Toujours true pour les assignations
+      loop_mode: 'true', // Toujours true pour les assignations
       assigned: 'true'
     });
     
@@ -489,18 +465,14 @@ export default function HomeScreen() {
             <View style={styles.assignedHeader}>
               <Monitor size={24} color="#ffffff" />
               <View style={styles.assignedBadges}>
-                {assignedPresentation.auto_play && (
-                  <View style={styles.autoPlayBadge}>
-                    <Play size={12} color="#ffffff" />
-                    <Text style={styles.badgeText}>AUTO</Text>
-                  </View>
-                )}
-                {assignedPresentation.loop_mode && (
-                  <View style={styles.loopBadge}>
-                    <Repeat size={12} color="#ffffff" />
-                    <Text style={styles.badgeText}>BOUCLE</Text>
-                  </View>
-                )}
+                <View style={styles.autoPlayBadge}>
+                  <Play size={12} color="#ffffff" />
+                  <Text style={styles.badgeText}>AUTO</Text>
+                </View>
+                <View style={styles.loopBadge}>
+                  <Repeat size={12} color="#ffffff" />
+                  <Text style={styles.badgeText}>BOUCLE</Text>
+                </View>
               </View>
             </View>
             
@@ -513,7 +485,7 @@ export default function HomeScreen() {
             
             <View style={styles.assignedFooter}>
               <Text style={styles.assignedMode}>
-                {assignedPresentation.auto_play ? '🚀 Lecture automatique' : '👆 Lecture manuelle'}
+                🚀 Lecture automatique en boucle
               </Text>
               <View style={styles.assignedPlayButton}>
                 <Play size={18} color="#ffffff" fill="#ffffff" />
