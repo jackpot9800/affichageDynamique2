@@ -2,10 +2,16 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Ensure TypeScript files are handled correctly
-config.resolver.sourceExts.push('ts', 'tsx');
+// Configuration pour gérer les extensions TypeScript
+config.resolver.sourceExts = ['js', 'jsx', 'ts', 'tsx', 'json', 'mjs'];
 
-// Add support for .mjs files
-config.resolver.sourceExts.push('mjs');
+// Configuration pour les transformations
+config.transformer = {
+  ...config.transformer,
+  babelTransformerPath: require.resolve('metro-react-native-babel-transformer'),
+};
+
+// Configuration pour résoudre les modules
+config.resolver.platforms = ['native', 'web', 'default'];
 
 module.exports = config;
