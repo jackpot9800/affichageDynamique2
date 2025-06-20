@@ -28,10 +28,20 @@ export default function HomeScreen() {
   const [defaultCheckStarted, setDefaultCheckStarted] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [showDefaultPresentationPrompt, setShowDefaultPresentationPrompt] = useState(false);
+  const [autoLaunchDefaultTimer, setAutoLaunchDefaultTimer] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     initializeApp();
   }, []);
+
+  // Nettoyage du timer au démontage du composant
+  useEffect(() => {
+    return () => {
+      if (autoLaunchDefaultTimer) {
+        clearTimeout(autoLaunchDefaultTimer);
+      }
+    };
+  }, [autoLaunchDefaultTimer]);
 
   const initializeApp = async () => {
     setLoading(true);
@@ -237,13 +247,21 @@ export default function HomeScreen() {
         
         setDefaultPresentation(defaultPres);
         
-        // Afficher une notification discrète au lieu d'une alerte
+        // Afficher une notification discrète
         setShowDefaultPresentationPrompt(true);
         
         // Masquer automatiquement après 10 secondes
         setTimeout(() => {
           setShowDefaultPresentationPrompt(false);
         }, 10000);
+
+        // Auto-lancement après 30 secondes si aucune interaction
+        const timer = setTimeout(() => {
+          console.log('=== AUTO-LAUNCHING DEFAULT PRESENTATION AFTER TIMEOUT ===');
+          launchDefaultPresentation(defaultPres);
+        }, 30000);
+        
+        setAutoLaunchDefaultTimer(timer);
       });
 
       console.log('=== CHECKING FOR EXISTING DEFAULT PRESENTATION ===');
@@ -251,6 +269,17 @@ export default function HomeScreen() {
       if (existing) {
         console.log('=== FOUND EXISTING DEFAULT PRESENTATION ===', existing);
         setDefaultPresentation(existing);
+        
+        // Afficher immédiatement la notification pour la présentation par défaut existante
+        setShowDefaultPresentationPrompt(true);
+        
+        // Auto-lancement après 30 secondes
+        const timer = setTimeout(() => {
+          console.log('=== AUTO-LAUNCHING EXISTING DEFAULT PRESENTATION ===');
+          launchDefaultPresentation(existing);
+        }, 30000);
+        
+        setAutoLaunchDefaultTimer(timer);
       }
     } catch (error) {
       console.log('=== DEFAULT PRESENTATION MONITORING FAILED ===');
@@ -272,6 +301,12 @@ export default function HomeScreen() {
     console.log('Auto play:', assigned.auto_play);
     console.log('Loop mode:', assigned.loop_mode);
     
+    // Annuler le timer de présentation par défaut si actif
+    if (autoLaunchDefaultTimer) {
+      clearTimeout(autoLaunchDefaultTimer);
+      setAutoLaunchDefaultTimer(null);
+    }
+    
     apiService.markAssignedPresentationAsViewed(assigned.presentation_id);
     
     const params = new URLSearchParams({
@@ -290,6 +325,15 @@ export default function HomeScreen() {
     console.log('=== LAUNCHING DEFAULT PRESENTATION ===');
     console.log('Presentation ID:', defaultPres.presentation_id);
     
+    // Annuler le timer si actif
+    if (autoLaunchDefaultTimer) {
+      clearTimeout(autoLaunchDefaultTimer);
+      setAutoLaunchDefaultTimer(null);
+    }
+    
+    // Masquer la notification
+    setShowDefaultPresentationPrompt(false);
+    
     const params = new URLSearchParams({
       auto_play: 'true',
       loop_mode: 'true',
@@ -301,6 +345,14 @@ export default function HomeScreen() {
     console.log('Navigating to:', url);
     
     router.push(url);
+  };
+
+  const cancelDefaultAutoLaunch = () => {
+    if (autoLaunchDefaultTimer) {
+      clearTimeout(autoLaunchDefaultTimer);
+      setAutoLaunchDefaultTimer(null);
+    }
+    setShowDefaultPresentationPrompt(false);
   };
 
   // Fonction de rafraîchissement manuel
@@ -336,6 +388,12 @@ export default function HomeScreen() {
 
   // Lancer une présentation avec mode boucle automatique
   const playPresentation = (presentation: Presentation) => {
+    // Annuler le timer de présentation par défaut si actif
+    if (autoLaunchDefaultTimer) {
+      clearTimeout(autoLaunchDefaultTimer);
+      setAutoLaunchDefaultTimer(null);
+    }
+    
     // Lancer automatiquement en mode boucle
     const params = new URLSearchParams({
       auto_play: 'true',
@@ -535,26 +593,30 @@ export default function HomeScreen() {
               <Text style={styles.promptTitle}>Présentation par défaut disponible</Text>
               <TouchableOpacity
                 style={styles.promptCloseButton}
-                onPress={() => setShowDefaultPresentationPrompt(false)}
+                onPress={cancelDefaultAutoLaunch}
               >
                 <Text style={styles.promptCloseText}>×</Text>
               </TouchableOpacity>
             </View>
             
             <Text style={styles.promptMessage}>
-              "{defaultPresentation.presentation_name}" est configurée comme présentation par défaut
+              "{defaultPresentation.presentation_name}" va se lancer automatiquement dans 30 secondes
             </Text>
             
             <View style={styles.promptActions}>
               <TouchableOpacity
                 style={styles.promptButton}
-                onPress={() => {
-                  setShowDefaultPresentationPrompt(false);
-                  launchDefaultPresentation(defaultPresentation);
-                }}
+                onPress={() => launchDefaultPresentation(defaultPresentation)}
               >
                 <Play size={16} color="#ffffff" />
                 <Text style={styles.promptButtonText}>Lancer maintenant</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.promptButton, styles.promptCancelButton]}
+                onPress={cancelDefaultAutoLaunch}
+              >
+                <Text style={styles.promptButtonText}>Annuler</Text>
               </TouchableOpacity>
             </View>
           </LinearGradient>
@@ -799,6 +861,7 @@ export default function HomeScreen() {
               {'\n'}Device ID: {apiService.getDeviceId()}
               {'\n'}Surveillance: {assignmentCheckStarted ? 'Active' : 'Inactive'}
               {'\n'}Mode: Lecture automatique en boucle
+              {defaultPresentation && '\n'}Présentation par défaut: Configurée
             </Text>
           </LinearGradient>
         </View>
@@ -1361,7 +1424,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   promptActions: {
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
   },
   promptButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -1371,10 +1435,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
+  },
+  promptCancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   promptButtonText: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
   },
 });
